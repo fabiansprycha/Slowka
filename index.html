@@ -135,6 +135,25 @@ textarea {
 .status.err { color: var(--bad); }
 .status.ok { color: var(--good); }
 
+.menu { display: flex; flex-direction: column; gap: 16px; text-align: center; padding-block: 6px; }
+.menu h2 { font: 700 28px var(--display); margin: 0; }
+.modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.mode {
+  display: flex; flex-direction: column; gap: 6px; align-items: flex-start; text-align: left;
+  padding: 18px; border-radius: 18px; border: 0; cursor: pointer; color: var(--tile-ink);
+  background: var(--t4); box-shadow: 0 6px 0 var(--t4s); font-family: var(--body);
+  transition: transform .08s, box-shadow .08s;
+}
+.mode.fix { background: var(--t1); box-shadow: 0 6px 0 var(--t1s); }
+.mode:active { transform: translateY(5px); box-shadow: 0 1px 0 var(--t4s); }
+.mode.fix:active { box-shadow: 0 1px 0 var(--t1s); }
+.mode b { font: 700 26px var(--display); }
+.mode span { font-weight: 600; font-size: 15px; line-height: 1.35; }
+.mode:disabled { opacity: .5; cursor: default; transform: none; }
+.dots { display: inline-flex; gap: 3px; margin-left: 6px; vertical-align: middle; }
+.dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--good); display: block; }
+.dots i.x { background: var(--bad); }
+.menu .weak { text-align: left; }
 .btn:disabled { opacity: .45; cursor: default; }
 .btn.danger { background: var(--bad); border-color: var(--bad); color: #fff; }
 .tabs { flex-wrap: wrap; }
@@ -176,8 +195,16 @@ textarea {
   </header>
 
   <section id="view-play" class="card">
-    <div class="progress"><span id="count">1 / 8</span><div class="bar"><i id="bar"></i></div><span id="score">0 pkt</span></div>
-    <div id="game">
+    <div class="progress" id="prog" hidden><span id="count">1 / 8</span><div class="bar"><i id="bar"></i></div><span id="score">0 pkt</span></div>
+    <div id="menu" class="menu">
+      <h2>Co dziś ćwiczymy?</h2>
+      <div class="modes">
+        <button class="mode" id="mode-full" type="button"><b>Lekcja</b><span id="mode-full-info">Wszystkie słówka z listy</span></button>
+        <button class="mode fix" id="mode-fix" type="button"><b>Poprawa</b><span id="mode-fix-info">Słówka, które ostatnio nie szły</span></button>
+      </div>
+      <div id="menu-weak"></div>
+    </div>
+    <div id="game" hidden>
       <div class="prompt"><small>Napisz po angielsku</small><div class="pl" id="pl">pies</div></div>
       <div class="slots" id="slots"></div>
       <div class="tray" id="tray"></div>
@@ -260,16 +287,69 @@ textarea {
 
   function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
-  function start() {
+  function loadList() {
     const raw = load();
     list = parse(raw == null ? SAMPLE : raw);
     if (!list.length) list = parse(SAMPLE);
-    queue = shuffle(list.slice());
+  }
+
+  // Words to improve. For each word on the current list, look at its attempts in history (newest first).
+  // An attempt's error = mistakes + 1 for a hint (max 3). Weakness = sum of errors weighted 1, 0.6, 0.36...
+  // over the last 5 attempts. A word counts as learned once its 2 latest attempts were perfect
+  // (or its only attempt was perfect), so one lucky try right after a bad one is not enough.
+  const wkey = (w) => (w.pl + "|" + w.en).toLowerCase();
+  function weakWords() {
+    const att = new Map();
+    loadHist().forEach((l) => l.words.forEach((w) => {
+      const k = wkey(w); if (!att.has(k)) att.set(k, []);
+      att.get(k).push(Math.min(3, (w.m || 0) + (w.h ? 1 : 0)));
+    }));
+    const out = [];
+    list.forEach((w) => {
+      const e = (att.get(wkey(w)) || []).slice(0, 5);
+      if (!e.length || (e[0] === 0 && (e.length === 1 || e[1] === 0))) return;
+      const weakness = e.reduce((s, x, k) => s + x * Math.pow(0.6, k), 0);
+      if (weakness > 0) out.push({ pl: w.pl, en: w.en, weakness, recent: e });
+    });
+    return out.sort((a, b) => b.weakness - a.weakness).slice(0, 10);
+  }
+
+  function dots(recent) {
+    const d = el("span", "dots"); d.title = "Ostatnie próby (od najnowszej)";
+    recent.forEach((x) => d.append(el("i", x ? "x" : null)));
+    return d;
+  }
+  function weakPanel(weak, title) {
+    const wb = el("div", "weak");
+    wb.append(el("h3", null, title));
+    if (!weak.length) { wb.append(el("p", "empty", "Nie ma słówek do poprawy. Wszystko ostatnio szło dobrze.")); return wb; }
+    const ul = el("ul", "chips");
+    weak.forEach((w) => { const li = el("li", null, w.pl + " – " + w.en); li.append(dots(w.recent)); ul.append(li); });
+    wb.append(ul);
+    wb.append(el("p", "empty", "Kropki to ostatnie próby, od najnowszej: zielona bez błędu, czerwona z błędem lub podpowiedzią. Słówko znika z poprawy po dwóch bezbłędnych próbach z rzędu."));
+    return wb;
+  }
+
+  function menu() {
+    loadList();
+    const weak = weakWords();
+    $("prog").hidden = true; $("game").hidden = true; $("done").hidden = true; $("menu").hidden = false;
+    $("mode-full-info").textContent = "Wszystkie słówka z listy (" + list.length + ")";
+    $("mode-fix").disabled = !weak.length;
+    $("mode-fix-info").textContent = weak.length ? "Słówka, które ostatnio nie szły (" + weak.length + ")" : "Na razie nie ma czego poprawiać";
+    const mw = $("menu-weak"); mw.innerHTML = "";
+    if (weak.length) mw.append(weakPanel(weak, "Do poprawy"));
+  }
+
+  function begin(words, kind) {
+    queue = shuffle(words.map((w) => ({ pl: w.pl, en: w.en })));
     total = queue.length; idx = 0; score = 0; solved = 0; missed = [];
-    newLesson("full");
-    $("done").hidden = true; $("game").hidden = false;
+    newLesson(kind);
+    $("menu").hidden = true; $("done").hidden = true; $("game").hidden = false; $("prog").hidden = false;
     show();
   }
+  function start() { loadList(); begin(list, "full"); }
+  function startFix() { loadList(); const w = weakWords(); if (w.length) begin(w, "fix"); else menu(); }
 
   function letters(en) { return [...en].filter((ch) => ch !== " "); }
 
@@ -366,22 +446,22 @@ textarea {
     const max = total * 3;
     const big = document.createElement("div"); big.className = "big"; big.textContent = score + " / " + max;
     const h = document.createElement("h2"); h.textContent = missed.length === 0 ? "Wszystko bez błędu!" : "Koniec rundy!";
-    const p = document.createElement("p");
-    p.textContent = missed.length === 0 ? "Każde słówko napisane bezbłędnie. Może jeszcze raz?" : "Te słówka warto powtórzyć:";
-    d.append(big, h, p);
-    if (missed.length) {
-      const ul = document.createElement("ul");
-      missed.forEach((w) => { const li = document.createElement("li"); li.textContent = w.pl + " – " + w.en; ul.append(li); });
-      d.append(ul);
+    d.append(big, h);
+    loadList();
+    const weak = weakWords();
+    if (weak.length) {
+      const panel = weakPanel(weak, "Teraz tryb poprawy?");
+      panel.style.textAlign = "left"; panel.style.alignSelf = "stretch";
+      d.append(panel);
+    } else d.append(el("p", null, "Nie ma słówek do poprawy. Brawo!"));
+    const acts = el("div", "actions");
+    if (weak.length) {
+      const r = el("button", "btn primary", "Popraw słówka (" + weak.length + ")"); r.type = "button";
+      r.onclick = startFix; acts.append(r);
     }
-    const acts = document.createElement("div"); acts.className = "actions";
-    if (missed.length) {
-      const r = document.createElement("button"); r.className = "btn primary"; r.type = "button"; r.textContent = "Powtórz trudne słówka";
-      r.onclick = () => { queue = shuffle(missed.slice()); total = queue.length; idx = 0; score = 0; solved = 0; missed = []; newLesson("repeat"); d.hidden = true; $("game").hidden = false; show(); };
-      acts.append(r);
-    }
-    const a = document.createElement("button"); a.className = "btn" + (missed.length ? "" : " primary"); a.type = "button"; a.textContent = "Zagraj od nowa";
+    const a = el("button", "btn" + (weak.length ? "" : " primary"), "Nowa lekcja"); a.type = "button";
     a.onclick = start; acts.append(a);
+    const m = el("button", "btn", "Menu"); m.type = "button"; m.onclick = menu; acts.append(m);
     d.append(acts);
   }
 
@@ -414,21 +494,8 @@ textarea {
     $("btn-clear").hidden = !h.length; $("btn-clear-yes").hidden = true; $("btn-clear-no").hidden = true;
     if (!h.length) { box.append(el("p", "empty", "Nie ma jeszcze żadnej lekcji. Historia pojawi się po ułożeniu pierwszego słówka.")); return; }
 
-    // Words to improve: errors or hints in the last 10 lessons, most problematic first.
-    const tally = new Map();
-    h.slice(0, 10).forEach((l) => l.words.forEach((w) => {
-      if (w.m > 0 || w.h) { const k = w.pl + " – " + w.en; tally.set(k, (tally.get(k) || 0) + w.m + (w.h ? 1 : 0)); }
-    }));
-    const weak = [...tally.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15);
-    const wb = el("div", "weak");
-    wb.append(el("h3", null, "Słówka do poprawy"));
-    if (weak.length) {
-      const ul = el("ul", "chips");
-      weak.forEach(([k, n]) => { const li = el("li", null, k); li.append(el("b", null, "×" + n)); li.title = "Błędy i podpowiedzi w ostatnich lekcjach"; ul.append(li); });
-      wb.append(ul);
-      wb.append(el("p", "empty", "Liczba przy słówku to błędy i podpowiedzi z ostatnich 10 lekcji."));
-    } else wb.append(el("p", "empty", "W ostatnich lekcjach wszystko bez błędów."));
-    weakBox.append(wb);
+    loadList();
+    weakBox.append(weakPanel(weakWords(), "Słówka do poprawy"));
 
     h.forEach((l) => {
       const done = l.words.length, perfect = l.words.filter((w) => !w.m && !w.h).length;
@@ -436,7 +503,7 @@ textarea {
       const card = el("div", "lesson");
       const top = el("div", "top");
       const left = el("div");
-      left.append(el("span", "date", fmtDate(l.at)), document.createTextNode(" "), el("span", "kind", l.kind === "repeat" ? "· powtórka" : ""));
+      left.append(el("span", "date", fmtDate(l.at)), document.createTextNode(" "), el("span", "kind", l.kind === "fix" ? "· poprawa" : l.kind === "repeat" ? "· powtórka" : ""));
       top.append(left, el("span", "res " + (pct >= .8 ? "g" : pct >= .5 ? "m" : "b"), perfect + " / " + done + " bez błędu"));
       card.append(top);
       const hints = l.words.filter((w) => w.h).length;
@@ -481,10 +548,12 @@ textarea {
     st.className = "status ok";
     st.textContent = ok ? "Zapisano " + n + " słówek." : "Ta przeglądarka nie pozwala zapisać listy, ale możesz ćwiczyć teraz.";
     if (!ok) { list = parse(txt); }
-    setTimeout(() => { tab("play"); if (ok) start(); else { queue = shuffle(list.slice()); total = queue.length; idx = 0; score = 0; solved = 0; missed = []; $("done").hidden = true; $("game").hidden = false; show(); } }, ok ? 500 : 900);
+    setTimeout(() => { tab("play"); if (ok) menu(); else begin(parse(txt), "full"); }, ok ? 500 : 900);
   };
 
-  start();
+  $("mode-full").onclick = start;
+  $("mode-fix").onclick = startFix;
+  menu();
 })();
 </script>
 </body>
