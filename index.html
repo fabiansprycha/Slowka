@@ -7,7 +7,7 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@400;600;700;800&display=swap">
 <style>
 /* Layout: one centered column; a card with the Polish word, letter slots, then a tray of tiles. */
 :root {
@@ -27,7 +27,7 @@
   --t4: #9cc3ff; --t4s: #6596e0;
   --t5: #d6a8ff; --t5s: #a974da;
   --tile-ink: #1d2a3a;
-  --display: "Fredoka", "Trebuchet MS", system-ui, sans-serif;
+  --display: "Baloo 2", "Trebuchet MS", system-ui, sans-serif;
   --body: "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 @media (prefers-color-scheme: dark) {
@@ -70,7 +70,7 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid var(--accent);
 
 .prompt { text-align: center; display: flex; flex-direction: column; gap: 4px; margin-block: 20px 22px; }
 .prompt small { text-transform: uppercase; letter-spacing: .1em; font-size: 12px; font-weight: 700; color: var(--muted); }
-.prompt .pl { font-family: var(--display); font-weight: 600; font-size: clamp(30px, 7vw, 44px); text-wrap: balance; overflow-wrap: anywhere; }
+.prompt .pl { font-family: var(--display); font-weight: 700; line-height: 1.15; font-size: clamp(30px, 7vw, 44px); text-wrap: balance; overflow-wrap: anywhere; }
 
 .slots, .tray { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .slots { margin-bottom: 26px; min-height: 60px; }
