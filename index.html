@@ -346,7 +346,7 @@ textarea {
     loadList();
     const weak = weakWords();
     $("prog").hidden = true; $("game").hidden = true; $("done").hidden = true; $("menu").hidden = false;
-    $("mode-full-info").textContent = "Wszystkie słówka z listy (" + list.length + ")";
+    $("mode-full-info").textContent = list.length > LESSON_SIZE ? LESSON_SIZE + " losowych słówek z " + list.length : "Wszystkie słówka z listy (" + list.length + ")";
     $("mode-fix").disabled = !weak.length;
     $("mode-fix-info").textContent = weak.length ? "Słówka, które ostatnio nie szły (" + weak.length + ")" : "Na razie nie ma czego poprawiać";
     const mw = $("menu-weak"); mw.innerHTML = "";
@@ -360,7 +360,17 @@ textarea {
     $("menu").hidden = true; $("done").hidden = true; $("game").hidden = false; $("prog").hidden = false;
     show();
   }
-  function start() { loadList(); begin(list, "full"); }
+  // A lesson draws 15 random words. Words practised less often in history go first,
+  // so over a few lessons every word on the list comes up.
+  const LESSON_SIZE = 15;
+  function pickLesson() {
+    const seen = new Map();
+    loadHist().forEach((l) => l.words.forEach((w) => { const k = wkey(w); seen.set(k, (seen.get(k) || 0) + 1); }));
+    return shuffle(list.slice())
+      .sort((a, b) => (seen.get(wkey(a)) || 0) - (seen.get(wkey(b)) || 0))
+      .slice(0, LESSON_SIZE);
+  }
+  function start() { loadList(); begin(pickLesson(), "full"); }
   function startFix() { loadList(); const w = weakWords(); if (w.length) begin(w, "fix"); else menu(); }
 
   const isL = (ch) => /\p{L}/u.test(ch);
