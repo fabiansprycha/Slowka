@@ -3,6 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#2f6fde">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Słówka">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>Słówka z kafelków</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -74,15 +82,17 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid var(--accent);
 
 .slots, .tray { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .slots { margin-bottom: 26px; min-height: 60px; }
+.slots { --s: clamp(38px, 10vw, 56px); }
 .slot {
-  --s: clamp(38px, 10vw, 56px);
   width: var(--s); height: var(--s); border-radius: 12px; background: var(--slot);
   border: 2px dashed var(--line); display: grid; place-items: center;
   font: 700 calc(var(--s) * .52) var(--display); color: var(--ink); text-transform: lowercase;
 }
 .slot.next { border-color: var(--accent); border-style: solid; }
 .slot.filled { background: var(--good); border: 2px solid var(--good); color: #fff; animation: pop .25s ease-out; }
-.slot.space { width: 18px; background: transparent; border: 0; }
+.slot.fixed { width: auto; min-width: 10px; background: transparent; border: 0; }
+.slots { column-gap: 22px; row-gap: 10px; }
+.wgroup { display: flex; flex-wrap: nowrap; justify-content: center; gap: 6px; max-width: 100%; }
 .word-done .slot.filled { animation: bounce .5s ease-out both; }
 
 .tray { padding-top: 22px; border-top: 2px dashed var(--line); }
@@ -240,7 +250,7 @@ textarea {
       <textarea id="words" spellcheck="false" aria-label="Lista słówek"></textarea>
       <div class="actions" style="justify-content:flex-start;margin-top:0">
         <button class="btn primary" id="btn-save" type="button">Zapisz i ćwicz</button>
-        <button class="btn" id="btn-sample" type="button">Wstaw przykładową listę</button>
+        <button class="btn" id="btn-sample" type="button">Wczytaj zestaw: Stars and Heroes 3 – Unit 2</button>
       </div>
       <div class="status" id="status"></div>
     </div>
@@ -250,7 +260,8 @@ textarea {
 <script>
 (function () {
   const KEY = "slowka-kafelki-lista";
-  const SAMPLE = "pies - dog\nkot - cat\njabłko - apple\ndom - house\nszkoła - school\nzielony - green\nprzyjaciel - friend\nlody - ice cream";
+  // Set: "Słówka na sprawdzian", Stars and Heroes 3, Unit 2.
+  const SAMPLE = "żyrafa - giraffe\nhiena - hyena\nsurykatka - meerkat\nnosorożec - rhino\nzebra - zebra\nlew - lion\nsłoń - elephant\nmałpa - monkey\nżaba - frog\nptak - bird\ndziób - beak\npazury - claws\npióra - feathers\nfutro - fur\nrogi - horns\nogon - tail\ntrąba - trunk\nkły - tusks\nskrzydła - wings\npustynia - desert\nlas - forest\nobszar trawiasty / sawanna - grassland\njezioro - lake\njeść - eat\nżyć, mieszkać - live\nużywać - use\nbiegać - run\nskakać - jump\nlatać - fly\nwspinać się - climb\nmięso - meat\nowady - insects\norzechy - nuts\nnasiona - seeds\nliście - leaves\njedzenie, pokarm - food\ndługi - long\nkrótki - short\nduży - big\nmały - small\nOno ma długi ogon. - It's got a long tail.\nOno ma dziób. - It's got a beak.\nOno ma skrzydła. - It's got wings.\nOno nie ma rogów. - It hasn't got horns.\nCo je lew? - What does a lion eat?\nOno je mięso. - It eats meat.\nGdzie żyje żyrafa? - Where does a giraffe live?\nOno żyje na obszarze trawiastym / sawannie. - It lives in the grassland.";
   const $ = (id) => document.getElementById(id);
 
   function load() { try { return localStorage.getItem(KEY); } catch (e) { return null; } }
@@ -351,7 +362,8 @@ textarea {
   function start() { loadList(); begin(list, "full"); }
   function startFix() { loadList(); const w = weakWords(); if (w.length) begin(w, "fix"); else menu(); }
 
-  function letters(en) { return [...en].filter((ch) => ch !== " "); }
+  const isL = (ch) => /\p{L}/u.test(ch);
+  function letters(en) { return [...en].filter(isL); }
 
   function show() {
     word = queue[idx]; pos = 0; mistakes = 0; hintUsed = false;
@@ -367,12 +379,24 @@ textarea {
     $("slots").className = "slots";
 
     const slots = $("slots"); slots.innerHTML = "";
-    [...word.en].forEach((ch) => {
-      const s = document.createElement("div");
-      s.className = "slot" + (ch === " " ? " space" : "");
-      if (ch !== " ") s.dataset.l = "1";
-      slots.appendChild(s);
+    // One group per word so a sentence wraps between words; punctuation is shown, not tiled.
+    word.en.split(" ").forEach((part) => {
+      const g = document.createElement("div"); g.className = "wgroup";
+      [...part].forEach((ch) => {
+        const s = document.createElement("div");
+        if (isL(ch)) { s.className = "slot"; s.dataset.l = "1"; }
+        else { s.className = "slot fixed"; s.textContent = ch; }
+        g.appendChild(s);
+      });
+      slots.appendChild(g);
     });
+    // Shrink the slots so the longest word fits on one line.
+    const longest = Math.max(...word.en.split(" ").map((p) => [...p].length));
+    const avail = slots.clientWidth || 320;
+    const fit = Math.floor((avail - (longest - 1) * 6) / longest);
+    const base = Math.min(56, Math.max(38, window.innerWidth * 0.1));
+    if (fit < base) slots.style.setProperty("--s", Math.max(22, fit) + "px");
+    else slots.style.removeProperty("--s");
 
     const tray = $("tray"); tray.innerHTML = "";
     const ls = letters(word.en);
@@ -556,5 +580,6 @@ textarea {
   menu();
 })();
 </script>
+<script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(function () {});</script>
 </body>
 </html>
