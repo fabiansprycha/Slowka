@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Słówka z kafelków</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700&display=swap">
+<style>
+/* Layout: one centered column; a card with the Polish word, letter slots, then a tray of tiles. */
+:root {
+  --bg: #eef4f8;
+  --surface: #ffffff;
+  --ink: #1d2a3a;
+  --muted: #5d6b7c;
+  --line: #d3dee8;
+  --slot: #e3ebf2;
+  --accent: #2f6fde;
+  --accent-ink: #ffffff;
+  --good: #1f9d63;
+  --bad: #d9473b;
+  --t1: #ffcf4a; --t1s: #d9a514;
+  --t2: #7fd1b9; --t2s: #44a88b;
+  --t3: #ff9f80; --t3s: #db7152;
+  --t4: #9cc3ff; --t4s: #6596e0;
+  --t5: #d6a8ff; --t5s: #a974da;
+  --tile-ink: #1d2a3a;
+  --display: "Fredoka", "Trebuchet MS", system-ui, sans-serif;
+  --body: "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #131b26; --surface: #1c2735; --ink: #eaf1f8; --muted: #9fb0c2; --line: #2d3b4d; --slot: #26344a;
+    --accent: #6c9cff; --accent-ink: #0f1722; --good: #3fcf8e; --bad: #ff6b5e;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #131b26; --surface: #1c2735; --ink: #eaf1f8; --muted: #9fb0c2; --line: #2d3b4d; --slot: #26344a;
+  --accent: #6c9cff; --accent-ink: #0f1722; --good: #3fcf8e; --bad: #ff6b5e;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { min-height: 100%; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 16px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 16px 40px;
+}
+.wrap { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+h1 { font-family: var(--display); font-weight: 700; font-size: 28px; margin: 0; letter-spacing: .01em; }
+h1 span { color: var(--accent); }
+.tabs { display: flex; gap: 6px; background: var(--slot); padding: 4px; border-radius: 14px; }
+.tabs button {
+  font: 600 15px var(--body); border: 0; background: transparent; color: var(--muted);
+  padding: 8px 14px; border-radius: 10px; cursor: pointer;
+}
+.tabs button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+button:focus-visible, textarea:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 22px 18px; }
+.progress { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-weight: 700; color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+.bar { flex: 1; height: 10px; background: var(--slot); border-radius: 99px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: var(--good); border-radius: 99px; transition: width .4s; }
+
+.prompt { text-align: center; display: flex; flex-direction: column; gap: 4px; margin-block: 20px 22px; }
+.prompt small { text-transform: uppercase; letter-spacing: .1em; font-size: 12px; font-weight: 700; color: var(--muted); }
+.prompt .pl { font-family: var(--display); font-weight: 600; font-size: clamp(30px, 7vw, 44px); text-wrap: balance; overflow-wrap: anywhere; }
+
+.slots, .tray { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.slots { margin-bottom: 26px; min-height: 60px; }
+.slot {
+  --s: clamp(38px, 10vw, 56px);
+  width: var(--s); height: var(--s); border-radius: 12px; background: var(--slot);
+  border: 2px dashed var(--line); display: grid; place-items: center;
+  font: 700 calc(var(--s) * .52) var(--display); color: var(--ink); text-transform: lowercase;
+}
+.slot.next { border-color: var(--accent); border-style: solid; }
+.slot.filled { background: var(--good); border: 2px solid var(--good); color: #fff; animation: pop .25s ease-out; }
+.slot.space { width: 18px; background: transparent; border: 0; }
+.word-done .slot.filled { animation: bounce .5s ease-out both; }
+
+.tray { padding-top: 22px; border-top: 2px dashed var(--line); }
+.tile {
+  --s: clamp(48px, 13vw, 66px);
+  --c: var(--t1); --cs: var(--t1s);
+  width: var(--s); height: var(--s); border-radius: 14px; border: 0; cursor: pointer;
+  background: var(--c); box-shadow: 0 5px 0 var(--cs); color: var(--tile-ink);
+  font: 700 calc(var(--s) * .5) var(--display); text-transform: lowercase;
+  transition: transform .08s, box-shadow .08s, opacity .2s;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+.tile:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--cs); }
+.tile.c2 { --c: var(--t2); --cs: var(--t2s); }
+.tile.c3 { --c: var(--t3); --cs: var(--t3s); }
+.tile.c4 { --c: var(--t4); --cs: var(--t4s); }
+.tile.c5 { --c: var(--t5); --cs: var(--t5s); }
+.tile.used { opacity: 0; pointer-events: none; transform: scale(.6); }
+.tile.wrong { animation: shake .35s; background: var(--bad); box-shadow: 0 5px 0 var(--bad); color: #fff; }
+.tile.hint { animation: glow 1s ease-in-out 2; }
+
+.actions { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin-top: 26px; }
+.btn {
+  font: 700 16px var(--body); border-radius: 14px; padding: 12px 18px; cursor: pointer;
+  border: 2px solid var(--line); background: var(--surface); color: var(--ink);
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn svg { width: 20px; height: 20px; }
+.feedback { text-align: center; min-height: 28px; font: 600 20px var(--display); margin-top: 16px; }
+.feedback.good { color: var(--good); }
+.feedback .en { font-size: 26px; }
+
+.done { text-align: center; display: flex; flex-direction: column; gap: 12px; align-items: center; padding-block: 10px; }
+.done .big { font: 700 56px var(--display); color: var(--good); font-variant-numeric: tabular-nums; }
+.done h2 { font: 700 28px var(--display); margin: 0; }
+.done p { margin: 0; color: var(--muted); max-width: 46ch; }
+.done ul { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.done li { background: var(--slot); border-radius: 10px; padding: 6px 10px; font-weight: 600; }
+
+.editor { display: flex; flex-direction: column; gap: 12px; }
+.editor h2 { font: 600 22px var(--display); margin: 0; }
+.editor p { margin: 0; color: var(--muted); line-height: 1.5; max-width: 62ch; }
+.editor code { background: var(--slot); padding: 1px 6px; border-radius: 6px; font-size: 14px; }
+textarea {
+  width: 100%; min-height: 260px; resize: vertical; border-radius: 14px; border: 2px solid var(--line);
+  background: var(--bg); color: var(--ink); padding: 14px; font: 600 17px/1.6 var(--body);
+}
+.status { font-weight: 700; font-size: 14px; color: var(--muted); }
+.status.err { color: var(--bad); }
+.status.ok { color: var(--good); }
+
+@keyframes shake { 0%,100% { transform: translateX(0) } 25% { transform: translateX(-7px) } 50% { transform: translateX(7px) } 75% { transform: translateX(-4px) } }
+@keyframes pop { from { transform: scale(.6) } to { transform: scale(1) } }
+@keyframes bounce { 0%,100% { transform: translateY(0) } 40% { transform: translateY(-12px) } }
+@keyframes glow { 50% { transform: translateY(-6px) scale(1.08); } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Słówka <span>z kafelków</span></h1>
+    <div class="tabs" role="tablist">
+      <button id="tab-play" role="tab" aria-selected="true">Ćwiczenie</button>
+      <button id="tab-edit" role="tab" aria-selected="false">Lista słówek</button>
+    </div>
+  </header>
+
+  <section id="view-play" class="card">
+    <div class="progress"><span id="count">1 / 8</span><div class="bar"><i id="bar"></i></div><span id="score">0 pkt</span></div>
+    <div id="game">
+      <div class="prompt"><small>Napisz po angielsku</small><div class="pl" id="pl">pies</div></div>
+      <div class="slots" id="slots"></div>
+      <div class="tray" id="tray"></div>
+      <div class="feedback" id="feedback"></div>
+      <div class="actions">
+        <button class="btn" id="btn-hint" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z"/></svg>
+          Podpowiedź
+        </button>
+        <button class="btn primary" id="btn-next" type="button" hidden>Dalej</button>
+      </div>
+    </div>
+    <div id="done" class="done" hidden></div>
+  </section>
+
+  <section id="view-edit" class="card" hidden>
+    <div class="editor">
+      <h2>Twoja lista słówek</h2>
+      <p>Wpisz jedno słówko w linii: najpierw po polsku, potem po angielsku, rozdzielone myślnikiem, np. <code>pies - dog</code>. Działa też <code>=</code>, <code>:</code>, średnik albo wklejka z Excela. Lista zapisuje się w tej przeglądarce.</p>
+      <textarea id="words" spellcheck="false" aria-label="Lista słówek"></textarea>
+      <div class="actions" style="justify-content:flex-start;margin-top:0">
+        <button class="btn primary" id="btn-save" type="button">Zapisz i ćwicz</button>
+        <button class="btn" id="btn-sample" type="button">Wstaw przykładową listę</button>
+      </div>
+      <div class="status" id="status"></div>
+    </div>
+  </section>
+</div>
+
+<script>
+(function () {
+  const KEY = "slowka-kafelki-lista";
+  const SAMPLE = "pies - dog\nkot - cat\njabłko - apple\ndom - house\nszkoła - school\nzielony - green\nprzyjaciel - friend\nlody - ice cream";
+  const $ = (id) => document.getElementById(id);
+
+  function load() { try { return localStorage.getItem(KEY); } catch (e) { return null; } }
+  function store(v) { try { localStorage.setItem(KEY, v); return true; } catch (e) { return false; } }
+
+  function parse(text) {
+    const out = [];
+    text.split(/\r?\n/).forEach((line) => {
+      line = line.trim();
+      if (!line) return;
+      const m = line.split(/\s*(?:\t|\s-\s|–|—|=|:|;)\s*/).filter(Boolean);
+      let pl, en;
+      if (m.length >= 2) { pl = m[0]; en = m.slice(1).join(" "); }
+      else if (line.includes("-")) { const i = line.indexOf("-"); pl = line.slice(0, i); en = line.slice(i + 1); }
+      else return;
+      pl = pl.trim(); en = en.trim().replace(/\s+/g, " ");
+      if (pl && en) out.push({ pl, en });
+    });
+    return out;
+  }
+
+  let list = [], queue = [], idx = 0, word = null, pos = 0, mistakes = 0, score = 0, missed = [], total = 0, solved = 0;
+
+  function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+  function start() {
+    const raw = load();
+    list = parse(raw == null ? SAMPLE : raw);
+    if (!list.length) list = parse(SAMPLE);
+    queue = shuffle(list.slice());
+    total = queue.length; idx = 0; score = 0; solved = 0; missed = [];
+    $("done").hidden = true; $("game").hidden = false;
+    show();
+  }
+
+  function letters(en) { return [...en].filter((ch) => ch !== " "); }
+
+  function show() {
+    word = queue[idx]; pos = 0; mistakes = 0;
+    $("pl").textContent = word.pl;
+    $("count").textContent = (solved + 1) + " / " + total;
+    $("bar").style.width = (solved / total * 100) + "%";
+    $("score").textContent = score + " pkt";
+    $("feedback").textContent = ""; $("feedback").className = "feedback";
+    $("btn-next").hidden = true;
+    $("btn-hint").hidden = false;
+    $("slots").className = "slots";
+
+    const slots = $("slots"); slots.innerHTML = "";
+    [...word.en].forEach((ch) => {
+      const s = document.createElement("div");
+      s.className = "slot" + (ch === " " ? " space" : "");
+      if (ch !== " ") s.dataset.l = "1";
+      slots.appendChild(s);
+    });
+
+    const tray = $("tray"); tray.innerHTML = "";
+    const ls = letters(word.en);
+    let order = shuffle(ls.map((_, i) => i));
+    if (ls.length > 1 && order.every((v, i) => v === i)) order.reverse();
+    order.forEach((i, k) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "tile c" + ((k % 5) + 1);
+      b.textContent = ls[i].toLowerCase();
+      b.dataset.ch = ls[i].toLowerCase();
+      b.setAttribute("aria-label", "litera " + ls[i]);
+      b.addEventListener("click", () => tap(b));
+      tray.appendChild(b);
+    });
+    markNext();
+  }
+
+  function slotEls() { return [...$("slots").querySelectorAll('.slot[data-l]')]; }
+  function markNext() {
+    slotEls().forEach((s, i) => s.classList.toggle("next", i === pos));
+  }
+
+  function tap(b) {
+    const ls = letters(word.en);
+    if (pos >= ls.length) return;
+    if (b.dataset.ch === ls[pos].toLowerCase()) {
+      const s = slotEls()[pos];
+      s.textContent = b.dataset.ch; s.classList.add("filled");
+      b.classList.add("used"); b.disabled = true;
+      pos++; markNext();
+      if (pos === ls.length) finishWord();
+    } else {
+      mistakes++;
+      b.classList.remove("wrong"); void b.offsetWidth; b.classList.add("wrong");
+      setTimeout(() => b.classList.remove("wrong"), 400);
+    }
+  }
+
+  function finishWord() {
+    const pts = Math.max(1, 3 - mistakes);
+    score += pts; solved++;
+    if (mistakes > 0) missed.push(word);
+    $("slots").classList.add("word-done");
+    $("bar").style.width = (solved / total * 100) + "%";
+    $("score").textContent = score + " pkt";
+    const praise = mistakes === 0 ? ["Super!", "Brawo!", "Idealnie!", "Świetnie!"] : ["Udało się!", "Dobrze!", "Jest!"];
+    const fb = $("feedback");
+    fb.className = "feedback good";
+    fb.innerHTML = "";
+    fb.append(praise[Math.floor(Math.random() * praise.length)] + " ");
+    const en = document.createElement("span"); en.className = "en"; en.textContent = word.en; fb.append(en);
+    $("btn-hint").hidden = true;
+    $("btn-next").hidden = false;
+    $("btn-next").textContent = idx + 1 < queue.length ? "Dalej" : "Zobacz wynik";
+    $("btn-next").focus({ preventScroll: true });
+  }
+
+  function next() {
+    idx++;
+    if (idx < queue.length) show(); else end();
+  }
+
+  function end() {
+    $("game").hidden = true;
+    const d = $("done"); d.hidden = false; d.innerHTML = "";
+    $("count").textContent = total + " / " + total;
+    $("bar").style.width = "100%";
+    const max = total * 3;
+    const big = document.createElement("div"); big.className = "big"; big.textContent = score + " / " + max;
+    const h = document.createElement("h2"); h.textContent = missed.length === 0 ? "Wszystko bez błędu!" : "Koniec rundy!";
+    const p = document.createElement("p");
+    p.textContent = missed.length === 0 ? "Każde słówko napisane bezbłędnie. Może jeszcze raz?" : "Te słówka warto powtórzyć:";
+    d.append(big, h, p);
+    if (missed.length) {
+      const ul = document.createElement("ul");
+      missed.forEach((w) => { const li = document.createElement("li"); li.textContent = w.pl + " – " + w.en; ul.append(li); });
+      d.append(ul);
+    }
+    const acts = document.createElement("div"); acts.className = "actions";
+    if (missed.length) {
+      const r = document.createElement("button"); r.className = "btn primary"; r.type = "button"; r.textContent = "Powtórz trudne słówka";
+      r.onclick = () => { queue = shuffle(missed.slice()); total = queue.length; idx = 0; score = 0; solved = 0; missed = []; d.hidden = true; $("game").hidden = false; show(); };
+      acts.append(r);
+    }
+    const a = document.createElement("button"); a.className = "btn" + (missed.length ? "" : " primary"); a.type = "button"; a.textContent = "Zagraj od nowa";
+    a.onclick = start; acts.append(a);
+    d.append(acts);
+  }
+
+  function hint() {
+    const ls = letters(word.en);
+    if (pos >= ls.length) return;
+    mistakes++;
+    const want = ls[pos].toLowerCase();
+    const t = [...$("tray").querySelectorAll(".tile:not(.used)")].find((b) => b.dataset.ch === want);
+    if (t) { t.classList.remove("hint"); void t.offsetWidth; t.classList.add("hint"); setTimeout(() => t.classList.remove("hint"), 2100); }
+  }
+
+  function tab(which) {
+    const play = which === "play";
+    $("tab-play").setAttribute("aria-selected", String(play));
+    $("tab-edit").setAttribute("aria-selected", String(!play));
+    $("view-play").hidden = !play; $("view-edit").hidden = play;
+    if (!play) { const raw = load(); $("words").value = raw == null ? SAMPLE : raw; $("status").textContent = ""; }
+  }
+
+  $("tab-play").onclick = () => tab("play");
+  $("tab-edit").onclick = () => tab("edit");
+  $("btn-next").onclick = next;
+  $("btn-hint").onclick = hint;
+  $("btn-sample").onclick = () => { $("words").value = SAMPLE; };
+  $("btn-save").onclick = () => {
+    const txt = $("words").value;
+    const n = parse(txt).length;
+    const st = $("status");
+    if (!n) { st.className = "status err"; st.textContent = "Nie widzę żadnej pary. Wpisz np. „pies - dog” w osobnej linii."; return; }
+    const ok = store(txt);
+    st.className = "status ok";
+    st.textContent = ok ? "Zapisano " + n + " słówek." : "Ta przeglądarka nie pozwala zapisać listy, ale możesz ćwiczyć teraz.";
+    if (!ok) { list = parse(txt); }
+    setTimeout(() => { tab("play"); if (ok) start(); else { queue = shuffle(list.slice()); total = queue.length; idx = 0; score = 0; solved = 0; missed = []; $("done").hidden = true; $("game").hidden = false; show(); } }, ok ? 500 : 900);
+  };
+
+  start();
+})();
+</script>
+</body>
+</html>
