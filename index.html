@@ -259,7 +259,8 @@ textarea {
 
 <script>
 (function () {
-  const KEY = "slowka-kafelki-lista";
+  // Bump the key whenever the built-in set changes, so every device starts on the new set.
+  const KEY = "slowka-kafelki-lista-sh3u2";
   // Set: "Słówka na sprawdzian", Stars and Heroes 3, Unit 2.
   const SAMPLE = "żyrafa - giraffe\nhiena - hyena\nsurykatka - meerkat\nnosorożec - rhino\nzebra - zebra\nlew - lion\nsłoń - elephant\nmałpa - monkey\nżaba - frog\nptak - bird\ndziób - beak\npazury - claws\npióra - feathers\nfutro - fur\nrogi - horns\nogon - tail\ntrąba - trunk\nkły - tusks\nskrzydła - wings\npustynia - desert\nlas - forest\nobszar trawiasty / sawanna - grassland\njezioro - lake\njeść - eat\nżyć, mieszkać - live\nużywać - use\nbiegać - run\nskakać - jump\nlatać - fly\nwspinać się - climb\nmięso - meat\nowady - insects\norzechy - nuts\nnasiona - seeds\nliście - leaves\njedzenie, pokarm - food\ndługi - long\nkrótki - short\nduży - big\nmały - small\nOno ma długi ogon. - It's got a long tail.\nOno ma dziób. - It's got a beak.\nOno ma skrzydła. - It's got wings.\nOno nie ma rogów. - It hasn't got horns.\nCo je lew? - What does a lion eat?\nOno je mięso. - It eats meat.\nGdzie żyje żyrafa? - Where does a giraffe live?\nOno żyje na obszarze trawiastym / sawannie. - It lives in the grassland.";
   const $ = (id) => document.getElementById(id);
