@@ -135,6 +135,27 @@ textarea {
 .status.err { color: var(--bad); }
 .status.ok { color: var(--good); }
 
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.danger { background: var(--bad); border-color: var(--bad); color: #fff; }
+.tabs { flex-wrap: wrap; }
+.hist { display: flex; flex-direction: column; gap: 14px; }
+.hist h2 { font: 600 22px var(--display); margin: 0; }
+.hist .empty { color: var(--muted); margin: 0; line-height: 1.5; }
+.weak { background: var(--slot); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.weak h3 { font: 600 18px var(--display); margin: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0; margin: 0; }
+.chips li { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; font-weight: 600; }
+.chips li b { color: var(--bad); font-variant-numeric: tabular-nums; margin-left: 4px; }
+.lesson { border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.lesson .top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.lesson .date { font-weight: 700; }
+.lesson .kind { color: var(--muted); font-weight: 600; font-size: 14px; }
+.lesson .res { font: 700 18px var(--display); font-variant-numeric: tabular-nums; }
+.lesson .res.g { color: var(--good); }
+.lesson .res.m { color: #c98a00; }
+.lesson .res.b { color: var(--bad); }
+.lesson .meta { color: var(--muted); font-size: 14px; }
+.lesson .chips li { font-size: 14px; padding: 4px 8px; }
 @keyframes shake { 0%,100% { transform: translateX(0) } 25% { transform: translateX(-7px) } 50% { transform: translateX(7px) } 75% { transform: translateX(-4px) } }
 @keyframes pop { from { transform: scale(.6) } to { transform: scale(1) } }
 @keyframes bounce { 0%,100% { transform: translateY(0) } 40% { transform: translateY(-12px) } }
@@ -149,6 +170,7 @@ textarea {
     <h1>Słówka <span>z kafelków</span></h1>
     <div class="tabs" role="tablist">
       <button id="tab-play" role="tab" aria-selected="true">Ćwiczenie</button>
+      <button id="tab-hist" role="tab" aria-selected="false">Historia</button>
       <button id="tab-edit" role="tab" aria-selected="false">Lista słówek</button>
     </div>
   </header>
@@ -169,6 +191,19 @@ textarea {
       </div>
     </div>
     <div id="done" class="done" hidden></div>
+  </section>
+
+  <section id="view-hist" class="card" hidden>
+    <div class="hist">
+      <div id="weak"></div>
+      <h2>Lekcje</h2>
+      <div id="lessons"></div>
+      <div class="actions" style="justify-content:flex-start;margin-top:4px">
+        <button class="btn" id="btn-clear" type="button" hidden>Wyczyść historię</button>
+        <button class="btn danger" id="btn-clear-yes" type="button" hidden>Tak, usuń całą historię</button>
+        <button class="btn" id="btn-clear-no" type="button" hidden>Anuluj</button>
+      </div>
+    </div>
   </section>
 
   <section id="view-edit" class="card" hidden>
@@ -211,6 +246,17 @@ textarea {
   }
 
   let list = [], queue = [], idx = 0, word = null, pos = 0, mistakes = 0, score = 0, missed = [], total = 0, solved = 0;
+  let hintUsed = false, lesson = null;
+
+  const HKEY = "slowka-kafelki-historia";
+  function loadHist() { try { return JSON.parse(localStorage.getItem(HKEY) || "[]"); } catch (e) { return []; } }
+  function saveHist(h) { try { localStorage.setItem(HKEY, JSON.stringify(h.slice(0, 200))); } catch (e) {} }
+  function newLesson(kind) { lesson = { id: Date.now() + "-" + Math.random().toString(36).slice(2, 6), at: Date.now(), kind, total, words: [], finished: false }; }
+  function saveLesson() {
+    if (!lesson || !lesson.words.length) return;
+    const h = loadHist().filter((l) => l.id !== lesson.id);
+    h.unshift(lesson); saveHist(h);
+  }
 
   function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
@@ -220,6 +266,7 @@ textarea {
     if (!list.length) list = parse(SAMPLE);
     queue = shuffle(list.slice());
     total = queue.length; idx = 0; score = 0; solved = 0; missed = [];
+    newLesson("full");
     $("done").hidden = true; $("game").hidden = false;
     show();
   }
@@ -227,7 +274,9 @@ textarea {
   function letters(en) { return [...en].filter((ch) => ch !== " "); }
 
   function show() {
-    word = queue[idx]; pos = 0; mistakes = 0;
+    word = queue[idx]; pos = 0; mistakes = 0; hintUsed = false;
+    $("btn-hint").disabled = false;
+    $("btn-hint").lastChild.textContent = " Podpowiedź ";
     $("pl").textContent = word.pl;
     $("count").textContent = (solved + 1) + " / " + total;
     $("bar").style.width = (solved / total * 100) + "%";
@@ -287,6 +336,7 @@ textarea {
     const pts = Math.max(1, 3 - mistakes);
     score += pts; solved++;
     if (mistakes > 0) missed.push(word);
+    if (lesson) { lesson.words.push({ pl: word.pl, en: word.en, m: mistakes - (hintUsed ? 1 : 0), h: hintUsed }); lesson.score = score; saveLesson(); }
     $("slots").classList.add("word-done");
     $("bar").style.width = (solved / total * 100) + "%";
     $("score").textContent = score + " pkt";
@@ -309,6 +359,7 @@ textarea {
 
   function end() {
     $("game").hidden = true;
+    if (lesson) { lesson.finished = true; lesson.score = score; saveLesson(); }
     const d = $("done"); d.hidden = false; d.innerHTML = "";
     $("count").textContent = total + " / " + total;
     $("bar").style.width = "100%";
@@ -326,7 +377,7 @@ textarea {
     const acts = document.createElement("div"); acts.className = "actions";
     if (missed.length) {
       const r = document.createElement("button"); r.className = "btn primary"; r.type = "button"; r.textContent = "Powtórz trudne słówka";
-      r.onclick = () => { queue = shuffle(missed.slice()); total = queue.length; idx = 0; score = 0; solved = 0; missed = []; d.hidden = true; $("game").hidden = false; show(); };
+      r.onclick = () => { queue = shuffle(missed.slice()); total = queue.length; idx = 0; score = 0; solved = 0; missed = []; newLesson("repeat"); d.hidden = true; $("game").hidden = false; show(); };
       acts.append(r);
     }
     const a = document.createElement("button"); a.className = "btn" + (missed.length ? "" : " primary"); a.type = "button"; a.textContent = "Zagraj od nowa";
@@ -336,23 +387,88 @@ textarea {
 
   function hint() {
     const ls = letters(word.en);
-    if (pos >= ls.length) return;
-    mistakes++;
+    if (pos >= ls.length || hintUsed) return;
+    mistakes++; hintUsed = true;
+    $("btn-hint").disabled = true;
+    $("btn-hint").lastChild.textContent = " Podpowiedź wykorzystana ";
     const want = ls[pos].toLowerCase();
     const t = [...$("tray").querySelectorAll(".tile:not(.used)")].find((b) => b.dataset.ch === want);
     if (t) { t.classList.remove("hint"); void t.offsetWidth; t.classList.add("hint"); setTimeout(() => t.classList.remove("hint"), 2100); }
   }
 
+  const MONTHS = ["stycznia","lutego","marca","kwietnia","maja","czerwca","lipca","sierpnia","września","października","listopada","grudnia"];
+  function fmtDate(t) {
+    const d = new Date(t), now = new Date();
+    const day = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+    const diff = Math.round((day(now) - day(d)) / 864e5);
+    const hm = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+    const label = diff === 0 ? "Dziś" : diff === 1 ? "Wczoraj" : d.getDate() + " " + MONTHS[d.getMonth()] + (d.getFullYear() !== now.getFullYear() ? " " + d.getFullYear() : "");
+    return label + ", " + hm;
+  }
+  function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+  function renderHist() {
+    const h = loadHist();
+    const weakBox = $("weak"), box = $("lessons");
+    weakBox.innerHTML = ""; box.innerHTML = "";
+    $("btn-clear").hidden = !h.length; $("btn-clear-yes").hidden = true; $("btn-clear-no").hidden = true;
+    if (!h.length) { box.append(el("p", "empty", "Nie ma jeszcze żadnej lekcji. Historia pojawi się po ułożeniu pierwszego słówka.")); return; }
+
+    // Words to improve: errors or hints in the last 10 lessons, most problematic first.
+    const tally = new Map();
+    h.slice(0, 10).forEach((l) => l.words.forEach((w) => {
+      if (w.m > 0 || w.h) { const k = w.pl + " – " + w.en; tally.set(k, (tally.get(k) || 0) + w.m + (w.h ? 1 : 0)); }
+    }));
+    const weak = [...tally.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15);
+    const wb = el("div", "weak");
+    wb.append(el("h3", null, "Słówka do poprawy"));
+    if (weak.length) {
+      const ul = el("ul", "chips");
+      weak.forEach(([k, n]) => { const li = el("li", null, k); li.append(el("b", null, "×" + n)); li.title = "Błędy i podpowiedzi w ostatnich lekcjach"; ul.append(li); });
+      wb.append(ul);
+      wb.append(el("p", "empty", "Liczba przy słówku to błędy i podpowiedzi z ostatnich 10 lekcji."));
+    } else wb.append(el("p", "empty", "W ostatnich lekcjach wszystko bez błędów."));
+    weakBox.append(wb);
+
+    h.forEach((l) => {
+      const done = l.words.length, perfect = l.words.filter((w) => !w.m && !w.h).length;
+      const pct = done ? perfect / done : 0;
+      const card = el("div", "lesson");
+      const top = el("div", "top");
+      const left = el("div");
+      left.append(el("span", "date", fmtDate(l.at)), document.createTextNode(" "), el("span", "kind", l.kind === "repeat" ? "· powtórka" : ""));
+      top.append(left, el("span", "res " + (pct >= .8 ? "g" : pct >= .5 ? "m" : "b"), perfect + " / " + done + " bez błędu"));
+      card.append(top);
+      const hints = l.words.filter((w) => w.h).length;
+      card.append(el("div", "meta",
+        (l.finished ? "Ukończona" : "Przerwana po " + done + " z " + l.total) +
+        " · " + (l.score || 0) + " pkt · podpowiedzi: " + hints));
+      const bad = l.words.filter((w) => w.m || w.h);
+      if (bad.length) {
+        const ul = el("ul", "chips");
+        bad.forEach((w) => { const li = el("li", null, w.pl + " – " + w.en); if (w.m) li.append(el("b", null, "×" + w.m)); if (w.h) li.append(el("span", "kind", " · podpowiedź")); ul.append(li); });
+        card.append(ul);
+      }
+      box.append(card);
+    });
+  }
+
   function tab(which) {
     const play = which === "play";
-    $("tab-play").setAttribute("aria-selected", String(play));
-    $("tab-edit").setAttribute("aria-selected", String(!play));
-    $("view-play").hidden = !play; $("view-edit").hidden = play;
-    if (!play) { const raw = load(); $("words").value = raw == null ? SAMPLE : raw; $("status").textContent = ""; }
+    ["play", "hist", "edit"].forEach((t) => {
+      $("tab-" + t).setAttribute("aria-selected", String(t === which));
+      $("view-" + t).hidden = t !== which;
+    });
+    if (which === "hist") renderHist();
+    if (which === "edit") { const raw = load(); $("words").value = raw == null ? SAMPLE : raw; $("status").textContent = ""; }
   }
 
   $("tab-play").onclick = () => tab("play");
   $("tab-edit").onclick = () => tab("edit");
+  $("tab-hist").onclick = () => tab("hist");
+  $("btn-clear").onclick = () => { $("btn-clear").hidden = true; $("btn-clear-yes").hidden = false; $("btn-clear-no").hidden = false; };
+  $("btn-clear-no").onclick = renderHist;
+  $("btn-clear-yes").onclick = () => { saveHist([]); renderHist(); };
   $("btn-next").onclick = next;
   $("btn-hint").onclick = hint;
   $("btn-sample").onclick = () => { $("words").value = SAMPLE; };
