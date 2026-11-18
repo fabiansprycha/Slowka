@@ -90,6 +90,11 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid var(--accent);
 }
 .slot.next { border-color: var(--accent); border-style: solid; }
 .slot.filled { background: var(--good); border: 2px solid var(--good); color: #fff; animation: pop .25s ease-out; }
+.slots.sentence .slot.word {
+  width: auto; height: 50px; padding: 0 10px; font-size: 22px; text-transform: none; max-width: 100%;
+}
+.tile.word { width: auto; height: 54px; padding: 0 16px; font-size: 24px; text-transform: none; }
+.slots.sentence .slot.fixed { font-size: 24px; }
 .slot.fixed { width: auto; min-width: 10px; background: transparent; border: 0; }
 .slots { column-gap: 22px; row-gap: 10px; }
 .wgroup { display: flex; flex-wrap: nowrap; justify-content: center; gap: 6px; max-width: 100%; }
@@ -375,6 +380,12 @@ textarea {
 
   const isL = (ch) => /\p{L}/u.test(ch);
   function letters(en) { return [...en].filter(isL); }
+  // A sentence (English side has a space) is built from whole words; a single word from letters.
+  const isSentence = (en) => en.trim().includes(" ");
+  function units(en) {
+    if (!isSentence(en)) return letters(en);
+    return en.split(" ").map((p) => p.replace(/[^\p{L}']+$/u, "")).filter(Boolean);
+  }
 
   function show() {
     word = queue[idx]; pos = 0; mistakes = 0; hintUsed = false;
@@ -390,36 +401,53 @@ textarea {
     $("slots").className = "slots";
 
     const slots = $("slots"); slots.innerHTML = "";
-    // One group per word so a sentence wraps between words; punctuation is shown, not tiled.
-    word.en.split(" ").forEach((part) => {
-      const g = document.createElement("div"); g.className = "wgroup";
-      [...part].forEach((ch) => {
-        const s = document.createElement("div");
-        if (isL(ch)) { s.className = "slot"; s.dataset.l = "1"; }
-        else { s.className = "slot fixed"; s.textContent = ch; }
-        g.appendChild(s);
+    const sentence = isSentence(word.en);
+    slots.classList.toggle("sentence", sentence);
+    if (sentence) {
+      // Sentence: one slot per word; the trailing punctuation is shown, not tiled.
+      word.en.split(" ").forEach((part) => {
+        const g = document.createElement("div"); g.className = "wgroup";
+        const m = part.match(/^(.*?)([^\p{L}']*)$/u);
+        const s1 = document.createElement("div"); s1.className = "slot word"; s1.dataset.l = "1";
+        s1.style.minWidth = "calc(" + [...m[1]].length * 0.62 + "em + 22px)";
+        g.appendChild(s1);
+        if (m[2]) { const f = document.createElement("div"); f.className = "slot fixed"; f.textContent = m[2]; g.appendChild(f); }
+        slots.appendChild(g);
       });
-      slots.appendChild(g);
-    });
-    // Shrink the slots so the longest word fits on one line.
-    const longest = Math.max(...word.en.split(" ").map((p) => [...p].length));
-    const avail = slots.clientWidth || 320;
-    const fit = Math.floor((avail - (longest - 1) * 6) / longest);
-    const base = Math.min(56, Math.max(38, window.innerWidth * 0.1));
-    if (fit < base) slots.style.setProperty("--s", Math.max(22, fit) + "px");
-    else slots.style.removeProperty("--s");
+      slots.style.removeProperty("--s");
+    } else {
+      // Single word: one slot per letter; anything that is not a letter is shown, not tiled.
+      word.en.split(" ").forEach((part) => {
+        const g = document.createElement("div"); g.className = "wgroup";
+        [...part].forEach((ch) => {
+          const s1 = document.createElement("div");
+          if (isL(ch)) { s1.className = "slot"; s1.dataset.l = "1"; }
+          else { s1.className = "slot fixed"; s1.textContent = ch; }
+          g.appendChild(s1);
+        });
+        slots.appendChild(g);
+      });
+      // Shrink the slots so the longest word fits on one line.
+      const longest = Math.max(...word.en.split(" ").map((p) => [...p].length));
+      const avail = slots.clientWidth || 320;
+      const fit = Math.floor((avail - (longest - 1) * 6) / longest);
+      const base = Math.min(56, Math.max(38, window.innerWidth * 0.1));
+      if (fit < base) slots.style.setProperty("--s", Math.max(22, fit) + "px");
+      else slots.style.removeProperty("--s");
+    }
 
     const tray = $("tray"); tray.innerHTML = "";
-    const ls = letters(word.en);
+    tray.classList.toggle("sentence", sentence);
+    const ls = units(word.en);
     let order = shuffle(ls.map((_, i) => i));
     if (ls.length > 1 && order.every((v, i) => v === i)) order.reverse();
     order.forEach((i, k) => {
       const b = document.createElement("button");
       b.type = "button";
-      b.className = "tile c" + ((k % 5) + 1);
-      b.textContent = ls[i].toLowerCase();
+      b.className = "tile c" + ((k % 5) + 1) + (sentence ? " word" : "");
+      b.textContent = sentence ? ls[i] : ls[i].toLowerCase();
       b.dataset.ch = ls[i].toLowerCase();
-      b.setAttribute("aria-label", "litera " + ls[i]);
+      b.setAttribute("aria-label", (sentence ? "wyraz " : "litera ") + ls[i]);
       b.addEventListener("click", () => tap(b));
       tray.appendChild(b);
     });
@@ -432,11 +460,11 @@ textarea {
   }
 
   function tap(b) {
-    const ls = letters(word.en);
+    const ls = units(word.en);
     if (pos >= ls.length) return;
     if (b.dataset.ch === ls[pos].toLowerCase()) {
       const s = slotEls()[pos];
-      s.textContent = b.dataset.ch; s.classList.add("filled");
+      s.textContent = b.textContent; s.classList.add("filled");
       b.classList.add("used"); b.disabled = true;
       pos++; markNext();
       if (pos === ls.length) finishWord();
@@ -501,7 +529,7 @@ textarea {
   }
 
   function hint() {
-    const ls = letters(word.en);
+    const ls = units(word.en);
     if (pos >= ls.length || hintUsed) return;
     mistakes++; hintUsed = true;
     $("btn-hint").disabled = true;
