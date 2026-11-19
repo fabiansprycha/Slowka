@@ -159,6 +159,26 @@ textarea {
   background: var(--t4); box-shadow: 0 6px 0 var(--t4s); font-family: var(--body);
   transition: transform .08s, box-shadow .08s;
 }
+.mode.learn { background: var(--t2); box-shadow: 0 6px 0 var(--t2s); }
+.mode.learn:active { box-shadow: 0 1px 0 var(--t2s); }
+.qcard {
+  margin: 4px auto 26px; max-width: 420px; padding: 26px 18px; border-radius: 20px; text-align: center;
+  background: var(--t5); box-shadow: 0 6px 0 var(--t5s); color: var(--tile-ink);
+  font: 700 clamp(28px, 7vw, 42px)/1.15 var(--display); text-wrap: balance; overflow-wrap: anywhere;
+}
+.choices { display: flex; flex-direction: column; gap: 14px; max-width: 420px; margin: 0 auto; }
+.choice {
+  min-height: 64px; padding: 12px 16px; border-radius: 16px; border: 0; cursor: pointer;
+  background: var(--t4); box-shadow: 0 5px 0 var(--t4s); color: var(--tile-ink);
+  font: 700 clamp(22px, 5.5vw, 28px)/1.2 var(--display); overflow-wrap: anywhere;
+  transition: transform .08s, box-shadow .08s, opacity .2s;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+.choice:nth-child(2) { background: var(--t1); box-shadow: 0 5px 0 var(--t1s); }
+.choice:nth-child(3) { background: var(--t3); box-shadow: 0 5px 0 var(--t3s); }
+.choice:active { transform: translateY(4px); box-shadow: none; }
+.choice.right { background: var(--good); box-shadow: 0 5px 0 var(--good); color: #fff; animation: pop .25s ease-out; }
+.choice.wrong { background: var(--bad); box-shadow: 0 5px 0 var(--bad); color: #fff; animation: shake .35s; opacity: .55; cursor: default; }
 .mode.fix { background: var(--t1); box-shadow: 0 6px 0 var(--t1s); }
 .mode:active { transform: translateY(5px); box-shadow: 0 1px 0 var(--t4s); }
 .mode.fix:active { box-shadow: 0 1px 0 var(--t1s); }
@@ -214,6 +234,7 @@ textarea {
     <div id="menu" class="menu">
       <h2>Co dziś ćwiczymy?</h2>
       <div class="modes">
+        <button class="mode learn" id="mode-learn" type="button"><b>Nauka</b><span id="mode-learn-info">Wybierz dobre słówko z trzech</span></button>
         <button class="mode" id="mode-full" type="button"><b>Lekcja</b><span id="mode-full-info">Wszystkie słówka z listy</span></button>
         <button class="mode fix" id="mode-fix" type="button"><b>Poprawa</b><span id="mode-fix-info">Słówka, które ostatnio nie szły</span></button>
       </div>
@@ -231,6 +252,12 @@ textarea {
         </button>
         <button class="btn primary" id="btn-next" type="button" hidden>Dalej</button>
       </div>
+    </div>
+    <div id="learn" hidden>
+      <div class="prompt"><small>Które to słówko po angielsku?</small></div>
+      <div class="qcard" id="lq">żyrafa</div>
+      <div class="choices" id="choices"></div>
+      <div class="feedback" id="lfeedback"></div>
     </div>
     <div id="done" class="done" hidden></div>
   </section>
@@ -317,7 +344,7 @@ textarea {
   const wkey = (w) => (w.pl + "|" + w.en).toLowerCase();
   function weakWords() {
     const att = new Map();
-    loadHist().forEach((l) => l.words.forEach((w) => {
+    loadHist().filter((l) => l.kind !== "learn").forEach((l) => l.words.forEach((w) => {
       const k = wkey(w); if (!att.has(k)) att.set(k, []);
       att.get(k).push(Math.min(3, (w.m || 0) + (w.h ? 1 : 0)));
     }));
@@ -350,7 +377,9 @@ textarea {
   function menu() {
     loadList();
     const weak = weakWords();
-    $("prog").hidden = true; $("game").hidden = true; $("done").hidden = true; $("menu").hidden = false;
+    $("prog").hidden = true; $("game").hidden = true; $("learn").hidden = true; $("done").hidden = true; $("menu").hidden = false;
+    $("mode-learn-info").textContent = Math.min(LESSON_SIZE, list.length) + " słówek, wybierasz jedno z trzech";
+    $("mode-learn").disabled = list.length < 3;
     $("mode-full-info").textContent = list.length > LESSON_SIZE ? LESSON_SIZE + " losowych słówek z " + list.length : "Wszystkie słówka z listy (" + list.length + ")";
     $("mode-fix").disabled = !weak.length;
     $("mode-fix-info").textContent = weak.length ? "Słówka, które ostatnio nie szły (" + weak.length + ")" : "Na razie nie ma czego poprawiać";
@@ -362,7 +391,7 @@ textarea {
     queue = shuffle(words.map((w) => ({ pl: w.pl, en: w.en })));
     total = queue.length; idx = 0; score = 0; solved = 0; missed = [];
     newLesson(kind);
-    $("menu").hidden = true; $("done").hidden = true; $("game").hidden = false; $("prog").hidden = false;
+    $("menu").hidden = true; $("done").hidden = true; $("learn").hidden = true; $("game").hidden = false; $("prog").hidden = false;
     show();
   }
   // A lesson draws 15 random words. Words practised less often in history go first,
@@ -370,12 +399,75 @@ textarea {
   const LESSON_SIZE = 15;
   function pickLesson() {
     const seen = new Map();
-    loadHist().forEach((l) => l.words.forEach((w) => { const k = wkey(w); seen.set(k, (seen.get(k) || 0) + 1); }));
+    loadHist().filter((l) => l.kind !== "learn").forEach((l) => l.words.forEach((w) => { const k = wkey(w); seen.set(k, (seen.get(k) || 0) + 1); }));
     return shuffle(list.slice())
       .sort((a, b) => (seen.get(wkey(a)) || 0) - (seen.get(wkey(b)) || 0))
       .slice(0, LESSON_SIZE);
   }
   function start() { loadList(); begin(pickLesson(), "full"); }
+  // Learning mode: the Polish word on a tile and three English answers to choose from.
+  // Wrong answers come from other words on the list, of the same kind (word or sentence) where possible.
+  let lq = [], li = 0, lMist = 0, lScore = 0, lLocked = false;
+  function startLearn() {
+    loadList();
+    if (list.length < 3) return menu();
+    lq = shuffle(list.slice()).slice(0, LESSON_SIZE);
+    total = lq.length; li = 0; lScore = 0;
+    queue = lq; newLesson("learn");
+    $("menu").hidden = true; $("done").hidden = true; $("game").hidden = true; $("learn").hidden = false; $("prog").hidden = false;
+    learnShow();
+  }
+  function learnShow() {
+    const w = lq[li]; lMist = 0; lLocked = false;
+    $("lq").textContent = w.pl;
+    $("count").textContent = (li + 1) + " / " + total;
+    $("bar").style.width = (li / total * 100) + "%";
+    $("score").textContent = lScore + " pkt";
+    $("lfeedback").textContent = ""; $("lfeedback").className = "feedback";
+    const same = (x) => isSentence(x.en) === isSentence(w.en);
+    const others = shuffle(list.filter((x) => x.en.toLowerCase() !== w.en.toLowerCase()));
+    const pool = [];
+    others.filter(same).concat(others.filter((x) => !same(x))).forEach((x) => {
+      if (pool.length < 2 && !pool.some((p) => p.toLowerCase() === x.en.toLowerCase())) pool.push(x.en);
+    });
+    const box = $("choices"); box.innerHTML = "";
+    shuffle([w.en, ...pool]).forEach((en) => {
+      const b = el("button", "choice", en); b.type = "button";
+      b.onclick = () => learnPick(b, en === w.en);
+      box.append(b);
+    });
+  }
+  function learnPick(b, ok) {
+    if (lLocked || b.classList.contains("wrong")) return;
+    const w = lq[li];
+    if (!ok) { lMist++; b.classList.add("wrong"); return; }
+    lLocked = true;
+    b.classList.add("right");
+    if (!lMist) lScore++;
+    if (lesson) { lesson.words.push({ pl: w.pl, en: w.en, m: lMist, h: false }); lesson.score = lScore; saveLesson(); }
+    $("bar").style.width = ((li + 1) / total * 100) + "%";
+    $("score").textContent = lScore + " pkt";
+    const fb = $("lfeedback"); fb.className = "feedback good";
+    fb.textContent = lMist ? "Tak, to jest to!" : ["Super!", "Brawo!", "Świetnie!"][Math.floor(Math.random() * 3)];
+    setTimeout(() => { li++; if (li < lq.length) learnShow(); else learnEnd(); }, 1100);
+  }
+  function learnEnd() {
+    if (lesson) { lesson.finished = true; lesson.score = lScore; saveLesson(); }
+    $("learn").hidden = true;
+    const d = $("done"); d.hidden = false; d.innerHTML = "";
+    const bad = lesson ? lesson.words.filter((w) => w.m) : [];
+    d.append(el("div", "big", lScore + " / " + total), el("h2", null, bad.length ? "Koniec nauki!" : "Wszystko dobrze!"));
+    if (bad.length) {
+      d.append(el("p", null, "Te słówka warto jeszcze poćwiczyć:"));
+      const ul = el("ul"); bad.forEach((w) => ul.append(el("li", null, w.pl + " – " + w.en))); d.append(ul);
+    } else d.append(el("p", null, "Każde słówko za pierwszym razem. Teraz spróbuj je ułożyć w lekcji."));
+    const acts = el("div", "actions");
+    const a = el("button", "btn primary", "Teraz lekcja"); a.type = "button"; a.onclick = start;
+    const r = el("button", "btn", "Ucz się dalej"); r.type = "button"; r.onclick = startLearn;
+    const m = el("button", "btn", "Menu"); m.type = "button"; m.onclick = menu;
+    acts.append(a, r, m); d.append(acts);
+  }
+
   function startFix() { loadList(); const w = weakWords(); if (w.length) begin(w, "fix"); else menu(); }
 
   const isL = (ch) => /\p{L}/u.test(ch);
@@ -566,7 +658,7 @@ textarea {
       const card = el("div", "lesson");
       const top = el("div", "top");
       const left = el("div");
-      left.append(el("span", "date", fmtDate(l.at)), document.createTextNode(" "), el("span", "kind", l.kind === "fix" ? "· poprawa" : l.kind === "repeat" ? "· powtórka" : ""));
+      left.append(el("span", "date", fmtDate(l.at)), document.createTextNode(" "), el("span", "kind", l.kind === "fix" ? "· poprawa" : l.kind === "learn" ? "· nauka" : l.kind === "repeat" ? "· powtórka" : ""));
       top.append(left, el("span", "res " + (pct >= .8 ? "g" : pct >= .5 ? "m" : "b"), perfect + " / " + done + " bez błędu"));
       card.append(top);
       const hints = l.words.filter((w) => w.h).length;
@@ -615,6 +707,7 @@ textarea {
   };
 
   $("mode-full").onclick = start;
+  $("mode-learn").onclick = startLearn;
   $("mode-fix").onclick = startFix;
   menu();
 })();
